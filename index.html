@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro-Poor Projects Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.css">
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { height: 100vh; width: 100%; }
+        .search-container {
+            position: absolute; top: 10px; left: 50px; z-index: 1000;
+            background: white; padding: 10px; border-radius: 5px;
+            display: flex; align-items: center; flex-direction: column;
+        }
+        #projectSearch { padding: 5px; width: 250px; }
+        #searchButton { margin-left: 5px; padding: 5px; cursor: pointer; }
+        #suggestions {
+            border: 1px solid #ccc;
+            max-height: 200px;
+            overflow-y: auto;
+            position: absolute;
+            top: 40px;
+            left: 50px;
+            background-color: white;
+            width: 250px;
+            z-index: 1000;
+        }
+        .suggestion-item {
+            padding: 8px;
+            cursor: pointer;
+        }
+        .suggestion-item:hover {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="search-container">
+        <input type="text" id="projectSearch" placeholder="Search for a project...">
+        <button id="searchButton">Search</button>
+        <div id="suggestions"></div>
+    </div>
+    <div id="map"></div>
+    
+    <script>
+        var map = L.map('map').setView([7.9465, -1.0232], 7);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        var projectMarkers = {};
+        var projectNames = [];
+
+        $.get("projects.csv", function(data) {
+            console.log("CSV Data Loaded");
+            var lines = data.split("\n");
+            for (var i = 1; i < lines.length; i++) {
+                var cols = lines[i].split(",");
+                if (cols.length < 3) continue;
+
+                var name = cols[0].trim();
+                var lat = parseFloat(cols[1]);
+                var lon = parseFloat(cols[2]);
+
+                if (!isNaN(lat) && !isNaN(lon)) {
+                    var marker = L.marker([lat, lon]).addTo(map).bindPopup(name);
+                    projectMarkers[name.toLowerCase()] = marker;
+                    projectNames.push(name);
+                }
+            }
+            console.log("Projects Loaded:", projectNames);
+
+            // Autocomplete search dropdown as user types
+            $("#projectSearch").on("input", function() {
+                var query = $(this).val().toLowerCase();
+                if (query.length > 0) {
+                    var filteredProjects = projectNames.filter(function(name) {
+                        return name.toLowerCase().includes(query);
+                    });
+                    displaySuggestions(filteredProjects);
+                } else {
+                    $("#suggestions").empty();
+                }
+            });
+
+            // Click on suggestion to perform search
+            $(document).on("click", ".suggestion-item", function() {
+                var selectedProject = $(this).text().trim().toLowerCase();
+                $("#projectSearch").val(selectedProject);
+                searchProject(selectedProject);
+                $("#suggestions").empty();
+            });
+        });
+
+        function displaySuggestions(filteredProjects) {
+            var suggestionsDiv = $("#suggestions");
+            suggestionsDiv.empty();
+            filteredProjects.forEach(function(project) {
+                var suggestionItem = $("<div>").addClass("suggestion-item").text(project);
+                suggestionsDiv.append(suggestionItem);
+            });
+        }
+
+        function searchProject(selectedProject) {
+            if (selectedProject in projectMarkers) {
+                console.log("Zooming to project:", selectedProject);
+                map.setView(projectMarkers[selectedProject].getLatLng(), 14);
+                projectMarkers[selectedProject].openPopup();
+                
+                // Reset marker icons to default
+                Object.values(projectMarkers).forEach(m => m.setIcon(new L.Icon.Default()));
+
+                var orangeIcon = new L.Icon({
+                    iconUrl: 'https://maps.google.com/mapfiles/ms/icons/orange-dot.png',
+                    iconSize: [32, 32]
+                });
+                projectMarkers[selectedProject].setIcon(orangeIcon);
+            } else {
+                alert("Project not found!");
+            }
+        }
+
+        $("#searchButton").click(function() {
+            var selectedProject = $("#projectSearch").val().trim().toLowerCase();
+            searchProject(selectedProject);
+        });
+
+        $("#projectSearch").keypress(function(event) {
+            if (event.which == 13) { 
+                var selectedProject = $(this).val().trim().toLowerCase();
+                searchProject(selectedProject);
+            }
+        });
+    </script>
+</body>
+</html>
